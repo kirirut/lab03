@@ -1,79 +1,56 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
-#include <signal.h>
-#include <string.h>
 #include <time.h>
-#include "common.h"
+#include <sys/time.h>
 #include "child.h"
-#include <stdlib.h>     // Для EXIT_SUCCESS
-#include <sys/time.h>   // Для struct itimerval, setitimer и ITIMER_REAL
 
+volatile pair_t data;
+volatile sig_atomic_t stats[4] = {0};
+volatile sig_atomic_t cycles = 0;
 
-void child_sigusr2_handler(int signo) {
-    (void)signo;
-    print_allowed = 1;
-}
-
-void child_sigalrm_handler(int signo) {
-    (void)signo;
-    int a = sharedPair.a;
-    int b = sharedPair.b;
-
-    if(a == 0 && b == 0) count00++;
-    else if(a == 0 && b == 1) count01++;
-    else if(a == 1 && b == 0) count10++;
-    else if(a == 1 && b == 1) count11++;
-
-    cycle_count++;
-}
-
-void setup_child_signals() {
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = child_sigalrm_handler;
-    sigaction(SIGALRM, &sa, NULL);
-
-    sa.sa_handler = child_sigusr2_handler;
-    sigaction(SIGUSR2, &sa, NULL);
-}
-
-void setup_timer() {
-    struct itimerval timer;
-    timer.it_interval.tv_sec = 0;
-    timer.it_interval.tv_usec = TIMER_INTERVAL_USEC;
-    timer.it_value.tv_sec = 0;
-    timer.it_value.tv_usec = TIMER_INTERVAL_USEC;
-    setitimer(ITIMER_REAL, &timer, NULL);
-}
-
-void child_process() {
-    setup_child_signals();
-    setup_timer();
-
-    struct timespec req = {0, SLEEP_NSEC};
-
-    while (1) {
-        while (cycle_count < CYCLES) {
-            sharedPair.a = 0;
-            nanosleep(&req, NULL);
-            sharedPair.b = 0;
-            nanosleep(&req, NULL);
-            sharedPair.a = 1;
-            nanosleep(&req, NULL);
-            sharedPair.b = 1;
-        }
-
-        kill(getppid(), SIGUSR1);
-        while (!print_allowed);
-
-        printf("Child [PPID=%d, PID=%d]: {0,0}=%d, {0,1}=%d, {1,0}=%d, {1,1}=%d\n",
-               getppid(), getpid(), count00, count01, count10, count11);
-        fflush(stdout);
-
-        print_allowed = 0;
-        cycle_count = 0;
-        count00 = count01 = count10 = count11 = 0;
+void handle_alarm(int signo) {
+    int index = data.a * 2 + data.b;
+    if (index >= 0 && index < 4) {
+        stats[index]++;
     }
 
-    _exit(EXIT_SUCCESS);
+    cycles++;
+    if (cycles >= 101) {
+        printf("CHILD PPID=%d PID=%d %d %d %d %d\n", getppid(), getpid(),
+               stats[0], stats[1], stats[2], stats[3]);
+        fflush(stdout);
+        for (int i = 0; i < 4; i++) stats[i] = 0;
+        cycles = 0;
+    }
+}
+
+int main() {
+    struct sigaction sa = {0};
+    sa.sa_handler = handle_alarm;
+    sigaction(SIGALRM, &sa, NULL);
+
+    struct itimerval timer = {
+        .it_interval = {0, 50000},
+        .it_value = {0, 50000}
+    };
+    setitimer(ITIMER_REAL, &timer, NULL);
+
+    struct timespec ts = {
+        .tv_sec = 0,
+        .tv_nsec = 3000000L
+    };
+
+    while (1) {
+        nanosleep(&ts, NULL);
+        data.a = 0;
+        nanosleep(&ts, NULL);
+        data.b = 0;
+        nanosleep(&ts, NULL);
+        data.a = 1;
+        nanosleep(&ts, NULL);
+        data.b = 1;
+    }
+
+    return 0;
 }

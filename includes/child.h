@@ -1,6 +1,19 @@
+#define _POSIX_C_SOURCE 200809L
+
 #ifndef CHILD_H
 #define CHILD_H
 
-void child_process(void);
+#include <signal.h>
 
-#endif // CHILD_H
+typedef struct {
+    int a;
+    int b;
+} pair_t;
+
+extern volatile pair_t data;
+extern volatile sig_atomic_t stats[4];
+extern volatile sig_atomic_t cycles;
+
+void handle_alarm(int signo);
+
+#endif

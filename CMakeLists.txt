@@ -1,13 +1,19 @@
 cmake_minimum_required(VERSION 3.10)
-project(lab03 C)
+project(ParentChild C)
 
 set(CMAKE_C_STANDARD 99)
 
 include_directories(includes)
 
-add_executable(lab03
-    src/main.c
+# Define the child executable
+add_executable(child
     src/child.c
-    src/parent.c
-    src/common.c
 )
+
+# Define the parent executable
+add_executable(parent
+    src/parent.c
+)
+
+# Ensure child is built before parent (since parent spawns child)
+add_dependencies(parent child)
