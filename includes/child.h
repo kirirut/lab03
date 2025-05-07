@@ -5,7 +5,8 @@
 
 #include <signal.h>
 
-typedef struct {
+typedef struct
+{
     int a;
     int b;
 } pair_t;
